@@ -1,3 +1,6 @@
+// based in default wordcount code from hadoop
+// https://hadoop.apache.org/docs/current/hadoop-mapreduce-client/hadoop-mapreduce-client-core/MapReduceTutorial.html
+
 import java.io.IOException;
 import java.util.StringTokenizer;
 
