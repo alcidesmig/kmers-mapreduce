@@ -17,14 +17,16 @@ public class KMers {
     public static class KMerMapper
         extends Mapper<Object, Text, Text, IntWritable> {
 
+        private final int sequenceSize = 9;
+
         private final static IntWritable one = new IntWritable(1);
         private Text word = new Text();
 
         public void map(Object key, Text value, Context context
                        ) throws IOException, InterruptedException {
             String value_sequence = value.toString();
-            for (int i = 0; i < value_sequence.length() - 8; i++) {
-                word.set(value_sequence.substring(i, i + 9));
+            for (int i = 0; i < value_sequence.length() - sequenceSize + 1; i++) {
+                word.set(value_sequence.substring(i, i + sequenceSize));
                 context.write(word, one);
 
                 /*
@@ -54,25 +56,57 @@ public class KMers {
         }
     }
 
+    public static class KMerOrderMapper extends
+        Mapper<Object, Text, IntWritable, Text> {
+        public void map(Object key, Text value,
+                        Context context
+                       ) throws java.io.IOException, InterruptedException {
+            String[] data = value.toString().split("\t");
+            IntWritable countPart = new IntWritable(Integer.parseInt(data[1]));
+            Text sequencePart = new Text(data[0]);
+            context.write(countPart, sequencePart);
+        }
+    }
+
+
+    public static class KMerOrderReducer extends
+        Reducer<IntWritable, Text, Text, IntWritable> {
+        public void reduce(IntWritable key, Iterable<Text> values,
+                           Context context
+                          )throws java.io.IOException, InterruptedException {
+            for (Text value : values) {
+                context.write(value, key);
+            }
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
-        String[] otherArgs = new GenericOptionsParser(conf, args).getRemainingArgs();
-        if (otherArgs.length < 2) {
-            System.err.println("Usage: kmers <in> [<in>...] <out>");
-            System.exit(2);
-        }
-        Job job = Job.getInstance(conf, "kmers");
-        job.setJarByClass(KMers.class);
-        job.setMapperClass(KMerMapper.class);
-        job.setCombinerClass(KMerReducer.class);
-        job.setReducerClass(KMerReducer.class);
-        job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(IntWritable.class);
-        for (int i = 0; i < otherArgs.length - 1; ++i) {
-            FileInputFormat.addInputPath(job, new Path(otherArgs[i]));
-        }
-        FileOutputFormat.setOutputPath(job,
-                                       new Path(otherArgs[otherArgs.length - 1]));
-        System.exit(job.waitForCompletion(true) ? 0 : 1);
+
+        Job job_kmers_find = Job.getInstance(conf, "kmers_find_step");
+        job_kmers_find.setJarByClass(KMers.class);
+        job_kmers_find.setMapperClass(KMerMapper.class);
+        job_kmers_find.setCombinerClass(KMerReducer.class);
+        job_kmers_find.setReducerClass(KMerReducer.class);
+        job_kmers_find.setOutputKeyClass(Text.class);
+        job_kmers_find.setOutputValueClass(IntWritable.class);
+
+        FileInputFormat.addInputPath(job_kmers_find, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job_kmers_find, new Path(args[1]));
+
+        job_kmers_find.waitForCompletion(true);
+
+        Configuration conf_sort = new Configuration();
+        Job job_kmers_sort = Job.getInstance(conf, "kmers_sort_step");
+        job_kmers_sort.setJarByClass(KMers.class);
+        job_kmers_sort.setMapperClass(KMerOrderMapper.class);
+        job_kmers_sort.setReducerClass(KMerOrderReducer.class);
+        job_kmers_sort.setOutputKeyClass(IntWritable.class);
+        job_kmers_sort.setOutputValueClass(Text.class);
+
+        FileInputFormat.addInputPath(job_kmers_sort, new Path(args[1]));
+        FileOutputFormat.setOutputPath(job_kmers_sort, new Path(args[2]));
+
+        System.exit(job_kmers_sort.waitForCompletion(true) ? 0 : 1 );
     }
 }
